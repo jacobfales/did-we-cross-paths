@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Did We Cross Paths?</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#e5e5ea; --bg:#fafaf7; --a:#d6336c; --b:#1c7ed6; --ok:#2b8a3e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 -apple-system, system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:28px; margin:8px 0 4px; }
+  .sub { color:var(--mute); margin:0 0 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin:14px 0; }
+  .card h2 { font-size:18px; margin:0 0 8px; }
+  .step { display:inline-block; width:26px; height:26px; border-radius:50%; background:var(--ink); color:#fff; text-align:center; line-height:26px; font-size:14px; margin-right:6px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+  label.btn, button { display:inline-block; border:0; border-radius:10px; padding:11px 16px; font:inherit; font-weight:600; cursor:pointer; background:var(--ink); color:#fff; }
+  label.btn.alt, button.alt { background:#f2f2f5; color:var(--ink); }
+  input[type=file] { display:none; }
+  input[type=text], input[type=date] { font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:8px; }
+  input[type=range] { width:100%; }
+  .status { color:var(--mute); font-size:14px; }
+  .status.good { color:var(--ok); }
+  .warn { background:#fff4e6; border:1px solid #ffd8a8; border-radius:10px; padding:10px 12px; font-size:14px; margin-top:8px; }
+  .person { flex:1 1 300px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+  #map { height:420px; border-radius:12px; margin-top:10px; }
+  #big { font-size:22px; font-weight:700; margin:4px 0; }
+  ol.hits { padding-left:22px; margin:10px 0 0; }
+  ol.hits li { padding:8px 0; border-bottom:1px solid var(--line); cursor:pointer; }
+  ol.hits li:hover { background:#f7f7fa; }
+  .small { font-size:13px; color:var(--mute); }
+  details summary { cursor:pointer; color:var(--mute); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Did We Cross Paths?</h1>
+  <p class="sub">See if you two were in the same place before you met. Free. Your photos never leave your phone. Only dots (place + time) are saved.</p>
+
+  <div class="card">
+    <h2><span class="step">1</span>Add your places</h2>
+    <div class="row">
+      <div class="person">
+        <div><span class="dot" style="background:var(--a)"></span><b>You</b></div>
+        <div class="row">
+          <input type="text" id="nameA" placeholder="Your name" value="">
+        </div>
+        <div class="row">
+          <label class="btn">Pick photos<input type="file" id="photosA" accept="image/heic,image/heif,image/jpeg,image/png,image/*" multiple></label>
+          <label class="btn alt">Google Timeline file<input type="file" id="timelineA" accept=".json,application/json"></label>
+        </div>
+        <div class="small"><b>iPhone tip:</b> in the photo picker, tap <b>Options</b> at the top and turn on <b>Location</b>. Then tap <b>Select</b> and swipe your finger across rows to grab lots of photos fast. You can pick more than once; it adds up.</div>
+        <div class="status" id="statusA">No places yet.</div>
+        <div class="row"><button class="alt hidden" id="saveA">Save my dots to send</button></div>
+      </div>
+      <div class="person">
+        <div><span class="dot" style="background:var(--b)"></span><b>Partner</b></div>
+        <div class="row">
+          <input type="text" id="nameB" placeholder="Partner's name" value="">
+        </div>
+        <div class="row">
+          <label class="btn">Open their dots file<input type="file" id="dotsB" accept=".json,application/json"></label>
+          <label class="btn alt">Or pick their photos<input type="file" id="photosB" accept="image/heic,image/heif,image/jpeg,image/png,image/*" multiple></label>
+        </div>
+        <div class="status" id="statusB">No places yet.</div>
+      </div>
+    </div>
+    <div class="warn hidden" id="noGps">
+      <b>Your phone hid the photo locations.</b> On iPhone: in the photo picker, tap <b>Options</b> at the top and turn on <b>Location</b>, then pick again. If you don't see Options, use this page on a Mac instead.
+    </div>
+    <details class="small" style="margin-top:10px">
+      <summary>How does my partner send me their dots?</summary>
+      <p>They open this same page on their phone, pick their photos, then tap <b>Save my dots to send</b>. They text or AirDrop you that small file. You tap <b>Open their dots file</b>.</p>
+      <p><b>Google Timeline file:</b> on your phone open Settings → Location → Location services → Timeline → Export Timeline data. Works only if Timeline was on.</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">2</span>Set the rules</h2>
+    <div class="row">When did you meet? <input type="date" id="met"></div>
+    <div>Close means within <b id="milesOut"></b></div>
+    <input type="range" id="miles" min="0.1" max="50" step="0.1" value="3">
+    <div>…and within <b id="daysOut"></b> of each other</div>
+    <input type="range" id="days" min="0" max="30" step="1" value="1">
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span>Results</h2>
+    <div id="big">Add places for both people to see results.</div>
+    <div class="small" id="bigSub"></div>
+    <div id="map"></div>
+    <ol class="hits" id="hits"></ol>
+  </div>
+
+  <div class="row">
+    <button class="alt" id="clear">Start over (clear everything)</button>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const DAY = 864e5;
+const store = {
+  load(k) { try { return JSON.parse(localStorage.getItem('cp_' + k)); } catch { return null; } },
+  save(k, v) { localStorage.setItem('cp_' + k, JSON.stringify(v)); },
+};
+
+// people: { name, points: [[lat, lon, ms], ...] }
+let A = store.load('A') || { name: '', points: [] };
+let B = store.load('B') || { name: '', points: [] };
+
+// Keep one dot per person per hour per ~1 km square, so files stay small and matching stays fast.
+function thin(points) {
+  const seen = new Set(), out = [];
+  for (const p of points.sort((x, y) => x[2] - y[2])) {
+    const key = Math.round(p[0] * 100) + ',' + Math.round(p[1] * 100) + ',' + Math.floor(p[2] / 36e5);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([+p[0].toFixed(5), +p[1].toFixed(5), p[2]]);
+  }
+  return out;
+}
+
+function merge(person, pts) {
+  person.points = thin(person.points.concat(pts));
+}
+
+async function readPhotos(files, onProgress) {
+  const pts = [];
+  let done = 0, dated = 0;
+  const list = [...files];
+  const worker = async () => {
+    while (list.length) {
+      const f = list.shift();
+      try {
+        const x = await exifr.parse(f, { gps: true, pick: ['DateTimeOriginal', 'CreateDate', 'GPSLatitude', 'GPSLongitude', 'GPSLatitudeRef', 'GPSLongitudeRef'] });
+        const when = x && (x.DateTimeOriginal || x.CreateDate);
+        if (when) dated++;
+        if (x && when && isFinite(x.latitude) && isFinite(x.longitude) && (x.latitude || x.longitude)) {
+          pts.push([x.latitude, x.longitude, new Date(when).getTime()]);
+        }
+      } catch {}
+      done++;
+      if (done % 10 === 0) onProgress(done, files.length);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return { pts, dated };
+}
+
+// Google Timeline: handles old Takeout (Records.json) and new phone exports (Timeline.json, location-history.json).
+function readTimeline(json) {
+  const pts = [];
+  const coordRe = /^(?:geo:)?\s*(-?\d+(?:\.\d+)?)°?\s*,\s*(-?\d+(?:\.\d+)?)°?\s*$/;
+  const timeOf = o => o && (o.timestamp || o.time || o.startTime || o.timestampMs || o.endTime);
+  const toMs = t => (typeof t === 'string' && /^\d+$/.test(t)) ? +t : new Date(t).getTime();
+  const walk = (node, inherited) => {
+    if (Array.isArray(node)) { node.forEach(n => walk(n, inherited)); return; }
+    if (!node || typeof node !== 'object') return;
+    let t = timeOf(node) || inherited;
+    // New iPhone export: timelinePath points have minutes offset from segment start.
+    if (node.durationMinutesOffsetFromStartTime && inherited) {
+      t = toMs(inherited) + (+node.durationMinutesOffsetFromStartTime) * 6e4;
+    }
+    if ('latitudeE7' in node && 'longitudeE7' in node && t) {
+      pts.push([node.latitudeE7 / 1e7, node.longitudeE7 / 1e7, toMs(t)]);
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (typeof v === 'string' && t) {
+        const m = v.match(coordRe);
+        if (m && /lat|point|place|start|end|location|position/i.test(k)) pts.push([+m[1], +m[2], toMs(t)]);
+      } else if (v && typeof v === 'object') {
+        walk(v, t);
+      }
+    }
+  };
+  walk(json, null);
+  return pts.filter(p => isFinite(p[0]) && isFinite(p[1]) && isFinite(p[2]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180);
+}
+
+function distMiles(a, b) {
+  const r = Math.PI / 180, R = 3958.8;
+  const dLat = (b[0] - a[0]) * r, dLon = (b[1] - a[1]) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function lowerBound(arr, t) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid][2] < t) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+function findCrossings(a, b, maxMiles, windowMs, beforeMs) {
+  const best = new Map();
+  for (const p of a) {
+    if (beforeMs && p[2] >= beforeMs) continue;
+    let close = null, cd = Infinity;
+    for (let i = lowerBound(b, p[2] - windowMs); i < b.length && b[i][2] <= p[2] + windowMs; i++) {
+      if (beforeMs && b[i][2] >= beforeMs) break;
+      const d = distMiles(p, b[i]);
+      if (d < cd) { cd = d; close = b[i]; }
+    }
+    if (!close || cd > maxMiles) continue;
+    // One result per day per area.
+    const key = new Date(p[2]).toDateString() + '|' + Math.round(p[0] * 10) + ',' + Math.round(p[1] * 10);
+    const old = best.get(key);
+    if (!old || cd < old.d || (cd === old.d && Math.abs(close[2] - p[2]) < old.gap)) {
+      best.set(key, { a: p, b: close, d: cd, gap: Math.abs(close[2] - p[2]) });
+    }
+  }
+  return [...best.values()].sort((x, y) => x.d - y.d || x.gap - y.gap);
+}
+
+const fmtDist = m => m < 0.1 ? Math.round(m * 5280) + ' feet' : m < 10 ? m.toFixed(1) + ' miles' : Math.round(m) + ' miles';
+function fmtGap(ms) {
+  const h = ms / 36e5;
+  if (h < 1) return Math.max(1, Math.round(ms / 6e4)) + ' min apart';
+  if (h < 48) return Math.round(h) + ' hours apart';
+  return Math.round(h / 24) + ' days apart';
+}
+const fmtDate = ms => new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+
+// ---------- Map ----------
+const map = L.map('map', { worldCopyJump: true }).setView([39.5, -98.35], 3);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+const layer = L.layerGroup().addTo(map);
+
+// ---------- UI ----------
+function describe(person, el) {
+  if (!person.points.length) { el.textContent = 'No places yet.'; el.className = 'status'; return; }
+  const ts = person.points.map(p => p[2]);
+  el.textContent = `${person.points.length.toLocaleString()} places, ${fmtDate(Math.min(...ts))} to ${fmtDate(Math.max(...ts))}`;
+  el.className = 'status good';
+}
+
+function render() {
+  const nameA = A.name || 'You', nameB = B.name || 'Partner';
+  describe(A, $('statusA'));
+  describe(B, $('statusB'));
+  $('saveA').classList.toggle('hidden', !A.points.length);
+  const miles = +$('miles').value, days = +$('days').value;
+  $('milesOut').textContent = fmtDist(miles);
+  $('daysOut').textContent = days === 0 ? 'the same day' : days === 1 ? '1 day' : days + ' days';
+
+  layer.clearLayers();
+  $('hits').innerHTML = '';
+  if (!A.points.length || !B.points.length) {
+    $('big').textContent = 'Add places for both people to see results.';
+    $('bigSub').textContent = '';
+    return;
+  }
+  const met = $('met').value ? new Date($('met').value + 'T00:00').getTime() : null;
+  const windowMs = days === 0 ? 12 * 36e5 : days * DAY;
+  const hits = findCrossings(A.points, B.points, miles, windowMs, met);
+
+  if (!hits.length) {
+    $('big').textContent = 'No close calls found with these rules.';
+    $('bigSub').textContent = 'Try making "close" bigger or the days wider.';
+    return;
+  }
+  const top = hits[0];
+  $('big').textContent = `${hits.length} time${hits.length > 1 ? 's' : ''} you were close${met ? ' before you met' : ''}!`;
+  $('bigSub').textContent = `Closest: ${fmtDist(top.d)} apart on ${fmtDate(top.a[2])}.`;
+
+  const bounds = [];
+  hits.slice(0, 300).forEach((h, i) => {
+    const ma = L.circleMarker([h.a[0], h.a[1]], { radius: 7, color: '#d6336c', fillOpacity: .8 }).bindPopup(`${nameA}: ${new Date(h.a[2]).toLocaleString()}`);
+    const mb = L.circleMarker([h.b[0], h.b[1]], { radius: 7, color: '#1c7ed6', fillOpacity: .8 }).bindPopup(`${nameB}: ${new Date(h.b[2]).toLocaleString()}`);
+    const line = L.polyline([[h.a[0], h.a[1]], [h.b[0], h.b[1]]], { color: '#888', weight: 2, dashArray: '4 4' });
+    layer.addLayer(ma); layer.addLayer(mb); layer.addLayer(line);
+    bounds.push([h.a[0], h.a[1]], [h.b[0], h.b[1]]);
+    if (i < 100) {
+      const li = document.createElement('li');
+      li.innerHTML = `<b>${fmtDate(h.a[2])}</b> · ${fmtDist(h.d)} apart · ${fmtGap(h.gap)}<br><span class="small"><a target="_blank" href="https://maps.google.com/?q=${h.a[0]},${h.a[1]}">${A.name ? A.name + "'s" : 'Your'} spot</a> · <a target="_blank" href="https://maps.google.com/?q=${h.b[0]},${h.b[1]}">${nameB}'s spot</a></span>`;
+      li.onclick = e => { if (e.target.tagName !== 'A') { map.setView([h.a[0], h.a[1]], 14); ma.openPopup(); window.scrollTo({ top: $('map').offsetTop - 20, behavior: 'smooth' }); } };
+      $('hits').appendChild(li);
+    }
+  });
+  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+}
+
+function persist() { store.save('A', A); store.save('B', B); render(); }
+
+async function handlePhotos(input, person, statusEl) {
+  const files = input.files;
+  if (!files.length) return;
+  statusEl.className = 'status';
+  statusEl.textContent = `Reading ${files.length} photos…`;
+  const { pts, dated } = await readPhotos(files, (d, n) => statusEl.textContent = `Reading photos… ${d} of ${n}`);
+  $('noGps').classList.toggle('hidden', !(pts.length === 0 && dated > 0));
+  if (!pts.length) { statusEl.textContent = `None of those ${files.length} photos had a location saved.`; input.value = ''; return; }
+  merge(person, pts);
+  input.value = '';
+  persist();
+}
+
+async function handleTimeline(input, person, statusEl) {
+  const f = input.files[0];
+  if (!f) return;
+  statusEl.textContent = 'Reading timeline…';
+  try {
+    const pts = readTimeline(JSON.parse(await f.text()));
+    if (!pts.length) { statusEl.textContent = 'No places found in that file.'; return; }
+    merge(person, pts);
+    persist();
+  } catch { statusEl.textContent = "That file didn't open. Is it the Timeline .json file?"; }
+  input.value = '';
+}
+
+$('nameA').value = A.name; $('nameB').value = B.name;
+$('met').value = store.load('met') || '';
+$('miles').value = store.load('miles') || 3;
+$('days').value = store.load('days') ?? 1;
+
+$('nameA').oninput = e => { A.name = e.target.value.trim(); persist(); };
+$('nameB').oninput = e => { B.name = e.target.value.trim(); persist(); };
+$('photosA').onchange = e => handlePhotos(e.target, A, $('statusA'));
+$('photosB').onchange = e => handlePhotos(e.target, B, $('statusB'));
+$('timelineA').onchange = e => handleTimeline(e.target, A, $('statusA'));
+$('dotsB').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (Array.isArray(data.points)) {
+      if (data.name && !B.name) { B.name = data.name; $('nameB').value = data.name; }
+      merge(B, data.points);
+    } else {
+      merge(B, readTimeline(data)); // also accept a Google Timeline file here
+    }
+    persist();
+  } catch { $('statusB').textContent = "That file didn't open."; }
+  e.target.value = '';
+};
+$('saveA').onclick = async () => {
+  const name = A.name || 'me';
+  const blob = new Blob([JSON.stringify({ app: 'did-we-cross-paths', name: A.name, points: A.points })], { type: 'application/json' });
+  const file = new File([blob], `${name.replace(/\W+/g, '-')}-dots.json`, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'My dots' }); return; } catch {}
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+};
+['met', 'miles', 'days'].forEach(id => $(id).oninput = () => { store.save(id, $(id).value); render(); });
+$('clear').onclick = () => {
+  if (!confirm('Clear all places for both people?')) return;
+  ['A', 'B', 'met', 'miles', 'days'].forEach(k => localStorage.removeItem('cp_' + k));
+  location.reload();
+};
+
+render();
+</script>
+</body>
+</html>
