@@ -43,6 +43,16 @@
   <h1>Did We Cross Paths?</h1>
   <p class="sub">See if you two were in the same place before you met. Free. Your photos never leave your phone. Only dots (place + time) are saved.</p>
 
+  <div class="card hidden" id="askCard">
+    <h2 id="askTitle"></h2>
+    <p style="margin:0">It finds out if you two were ever in the same place before you met. Your photos stay on your phone. Only places and times get sent.</p>
+    <ol style="margin:10px 0 0; padding-left:20px">
+      <li>Tap <b>Pick photos</b> below. In the picker tap <b>Options</b> → turn on <b>Location</b>.</li>
+      <li>Pick your older photos (the more the better; you can pick more than once).</li>
+      <li>Tap the big <b id="askSendLabel"></b> button and text it.</li>
+    </ol>
+  </div>
+
   <div class="card">
     <h2><span class="step">1</span>Add your places</h2>
     <div class="row">
@@ -53,13 +63,14 @@
         </div>
         <div class="row">
           <label class="btn">Pick photos<input type="file" id="photosA" accept="image/heic,image/heif,image/jpeg,image/png,image/*" multiple></label>
-          <label class="btn alt">Google Timeline file<input type="file" id="timelineA" accept=".json,application/json"></label>
+          <label class="btn alt">Open a dots or Timeline file<input type="file" id="timelineA" accept=".json,application/json"></label>
         </div>
         <div class="small"><b>iPhone tip:</b> in the photo picker, tap <b>Options</b> at the top and turn on <b>Location</b>. Then tap <b>Select</b> and swipe your finger across rows to grab lots of photos fast. You can pick more than once; it adds up.</div>
         <div class="status" id="statusA">No places yet.</div>
         <div class="row"><button class="alt hidden" id="saveA">Save my dots to send</button></div>
+        <div class="row"><button class="alt" id="invite">Send my partner a link</button></div>
       </div>
-      <div class="person">
+      <div class="person" id="partnerCol">
         <div><span class="dot" style="background:var(--b)"></span><b>Partner</b></div>
         <div class="row">
           <input type="text" id="nameB" placeholder="Partner's name" value="">
@@ -81,7 +92,7 @@
     </details>
   </div>
 
-  <div class="card">
+  <div class="card" id="rulesCard">
     <h2><span class="step">2</span>Set the rules</h2>
     <div class="row">When did you meet? <input type="date" id="met"></div>
     <div>Close means within <b id="milesOut"></b></div>
@@ -90,7 +101,7 @@
     <input type="range" id="days" min="0" max="30" step="1" value="1">
   </div>
 
-  <div class="card">
+  <div class="card" id="resultsCard">
     <h2><span class="step">3</span>Results</h2>
     <div id="big">Add places for both people to see results.</div>
     <div class="small" id="bigSub"></div>
@@ -306,7 +317,9 @@ async function handleTimeline(input, person, statusEl) {
   if (!f) return;
   statusEl.textContent = 'Reading timeline…';
   try {
-    const pts = readTimeline(JSON.parse(await f.text()));
+    const data = JSON.parse(await f.text());
+    const pts = Array.isArray(data.points) ? data.points : readTimeline(data);
+    if (data.name && !person.name) { person.name = data.name; $('nameA').value = data.name; }
     if (!pts.length) { statusEl.textContent = 'No places found in that file.'; return; }
     merge(person, pts);
     persist();
@@ -354,6 +367,25 @@ $('clear').onclick = () => {
   if (!confirm('Clear all places for both people?')) return;
   ['A', 'B', 'met', 'miles', 'days'].forEach(k => localStorage.removeItem('cp_' + k));
   location.reload();
+};
+
+// Partner mode: ?for=Jacob shows one simple job, pick photos and send them back.
+const askFor = new URLSearchParams(location.search).get('for');
+if (askFor) {
+  const label = `Send to ${askFor}`;
+  $('askCard').classList.remove('hidden');
+  $('askTitle').textContent = `${askFor} wants to see if you two crossed paths`;
+  $('askSendLabel').textContent = label;
+  ['partnerCol', 'rulesCard', 'resultsCard', 'invite'].forEach(id => $(id).classList.add('hidden'));
+  $('saveA').textContent = label;
+  $('saveA').classList.remove('alt');
+}
+$('invite').onclick = async () => {
+  const url = location.origin + location.pathname + '?for=' + encodeURIComponent(A.name || 'me');
+  const text = 'Pick your old photos here and send me the file. Lets see if we crossed paths before we met!';
+  if (navigator.share) { try { await navigator.share({ title: 'Did we cross paths?', text, url }); return; } catch {} }
+  try { await navigator.clipboard.writeText(url); $('invite').textContent = 'Link copied! Paste it in a text.'; }
+  catch { prompt('Copy this link:', url); }
 };
 
 render();
